@@ -6,3 +6,4 @@ testsuite/runtest.pyc
 src/doc/figures/
 .cproject
 .project
+/src/myTool/myTool/x64/Debug
