@@ -35,18 +35,32 @@
 #include <OpenEXR/half.h>
 #include <OpenEXR/ImfTimeCode.h>
 
-#include "OpenImageIO/dassert.h"
-#include "OpenImageIO/typedesc.h"
-#include "OpenImageIO/strutil.h"
-#include "OpenImageIO/fmath.h"
-#include "OpenImageIO/imageio.h"
+#include <OpenImageIO/dassert.h>
+#include <OpenImageIO/typedesc.h>
+#include <OpenImageIO/strutil.h>
+#include <OpenImageIO/fmath.h>
+#include <OpenImageIO/imageio.h>
+#include <OpenImageIO/imagebuf.h>
 #include "imageio_pvt.h"
 
 #if USE_EXTERNAL_PUGIXML
 # include "pugixml.hpp"
 #else
-# include "OpenImageIO/pugixml.hpp"
+# include <OpenImageIO/pugixml.hpp>
 #endif
+
+#ifdef USE_BOOST_REGEX
+# include <boost/regex.hpp>
+  using boost::regex;
+  using boost::regex_match;
+  using namespace boost::regex_constants;
+#else
+# include <regex>
+  using std::regex;
+  using std::regex_match;
+  using namespace std::regex_constants;
+#endif
+
 
 OIIO_NAMESPACE_BEGIN
 
@@ -132,6 +146,21 @@ ImageSpec::ImageSpec (int xres, int yres, int nchans, TypeDesc format)
       full_width(xres), full_height(yres), full_depth(1),
       tile_width(0), tile_height(0), tile_depth(1),
       nchannels(nchans), format(format), alpha_channel(-1), z_channel(-1),
+      deep(false)
+{
+    default_channel_names ();
+}
+
+
+
+ImageSpec::ImageSpec (const ROI &roi, TypeDesc format)
+    : x(roi.xbegin), y(roi.ybegin), z(roi.zbegin),
+      width(roi.width()), height(roi.height()), depth(roi.depth()),
+      full_x(0), full_y(0), full_z(0),
+      full_width(width), full_height(height), full_depth(1),
+      tile_width(0), tile_height(0), tile_depth(1),
+      nchannels(roi.nchannels()), format(format),
+      alpha_channel(-1), z_channel(-1),
       deep(false)
 {
     default_channel_names ();
@@ -358,10 +387,27 @@ void
 ImageSpec::erase_attribute (string_view name, TypeDesc searchtype,
                             bool casesensitive)
 {
-    ImageIOParameterList::iterator iter =
-        extra_attribs.find (name, searchtype, casesensitive);
-    if (iter != extra_attribs.end())
-        extra_attribs.erase (iter);
+    if (extra_attribs.empty())
+        return;   // Don't mess with regexp if there isn't any metadata
+    try {
+#if USE_BOOST_REGEX
+        boost::regex_constants::syntax_option_type flag = boost::regex_constants::basic;
+        if (! casesensitive)
+            flag |= boost::regex_constants::icase;
+#else
+        std::regex_constants::syntax_option_type flag = std::regex_constants::basic;
+        if (casesensitive)
+            flag |= std::regex_constants::icase;
+#endif
+        regex re = regex(name.str(), flag);
+        auto matcher = [&](const ParamValue &p){
+                           return regex_match (p.name().string(), re);
+                       };
+        auto del = std::remove_if (extra_attribs.begin(), extra_attribs.end(), matcher);
+        extra_attribs.erase (del, extra_attribs.end());
+    } catch (...) {
+        return;
+    }
 }
 
 

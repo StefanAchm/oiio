@@ -40,11 +40,11 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include "OpenImageIO/platform.h"
-#include "OpenImageIO/dassert.h"
-#include "OpenImageIO/strutil.h"
-#include "OpenImageIO/ustring.h"
-#include "OpenImageIO/string_view.h"
+#include <OpenImageIO/platform.h>
+#include <OpenImageIO/dassert.h>
+#include <OpenImageIO/strutil.h>
+#include <OpenImageIO/ustring.h>
+#include <OpenImageIO/string_view.h>
 
 #ifdef _WIN32
 # include <shellapi.h>
@@ -773,6 +773,20 @@ Strutil::parse_identifier (string_view &str, string_view allowed, bool eat)
         str = p;
     }
     return string_view (begin, size_t(end-begin));
+}
+
+
+
+bool
+Strutil::parse_identifier_if (string_view &str, string_view id, bool eat)
+{
+    string_view head = parse_identifier (str, false /* don't eat */);
+    if (head == id) {
+        if (eat)
+            parse_identifier (str);
+        return true;
+    }
+    return false;
 }
 
 

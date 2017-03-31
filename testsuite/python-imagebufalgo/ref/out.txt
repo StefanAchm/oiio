@@ -154,3 +154,5 @@ Comparing "tahoe-small.tx" and "ref/tahoe-small.tx"
 PASS
 Comparing "text.tif" and "../../../../testsuite/oiiotool-text/ref/text-freetype2.7.tif"
 PASS
+Comparing "textcentered.tif" and "ref/textcentered.tif"
+PASS

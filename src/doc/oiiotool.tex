@@ -222,6 +222,16 @@ specified image (e.g., {\cf ImageDescription}, or {\cf width})
 \item[{Arithmetic}] Sub-expressions may be joined by {\cf +}, {\cf -},
 {\cf *}, or {\cf /} for arithmetic operations. Parentheses are supported,
 and standard operator precedence applies.
+
+\item[{Special variables}] \spc
+
+\begin{itemize}
+\item {\cf FRAME_NUMBER} : the number of the frame in this iteration of
+    wildcard expansion.
+\item {\cf FRAME_NUMBER_PAD} : like {\cf FRAME_NUMBER}, but 0-padded based
+    on the value set on the command line by {\cf --framepadding}.
+\end{itemize}
+
 \end{description}
 
 To illustrate how this works, consider the following command, which trims
@@ -1317,7 +1327,8 @@ all subimages or MIPmap levels of the current top image.  Otherwise,
 they only apply to the highest-resolution MIPmap level of the first
 subimage of the current top image.
 
-\apiitem{\ce --attrib {\rm \emph{name value}}}
+\apiitem{\ce --attrib {\rm \emph{name value}} \\
+\ce --sattrib {\rm \emph{name value}}}
 Adds or replaces metadata with the given \emph{name} to have the
 specified \emph{value}.
 
@@ -1335,13 +1346,14 @@ be saved as {\cf int} metadata; if it also contains a decimal point, it
 will be saved as {\cf float} metadata; otherwise, it will be saved as
 a {\cf string} metadata.
 
+\noindent The {\cf --sattrib} command is equivalent to {\cf --attrib:type=string}.
 
 \noindent Examples:
 
 \begin{code}
-    oiiotool in.jpg --attrib "IPTC:City" "Berkeley" out.jpg
+    oiiotool in.jpg --attrib "IPTC:City" "Berkeley" -o out.jpg
 
-    oiiotool in.jpg --attrib:type=string "Name" "0" out.jpg
+    oiiotool in.jpg --attrib:type=string "Name" "0" -o out.jpg
 
     oiiotool in.exr --attrib:type=matrix worldtocam \
             "1,0,0,0,0,1,0,0,0,0,1,0,2.3,2.1,0,1" -o out.exr
@@ -1349,15 +1361,6 @@ a {\cf string} metadata.
     oiiotool in.exr --attrib:type=timecode smpte:TimeCode "11:34:04:00" \
             -o out.exr
 \end{code}
-\apiend
-
-\apiitem{\ce --sattrib {\rm \emph{name value}}}
-Adds or replaces metadata with the given \emph{name} to have the
-specified \emph{value}, forcing it to be interpreted as a {\cf string}.
-This is helpful if you want to set a {\cf string} metadata to a value
-that the {\cf --attrib} command would normally interpret as a number.
-
-\noindent Note also that {\cf --sattrib} is equivalent to {\cf --attrib:type=string}.
 \apiend
 
 \apiitem{\ce --caption {\rm \emph{text}}}
@@ -1395,6 +1398,25 @@ When set, this prevents the normal adjustment of \qkw{Software} and
 When set, this edits the command line inserted in the \qkw{Software} and
 \qkw{ImageHistory} metadata to omit any verbose {\cf --attrib} and
 {\cf --sattrib} commands.
+\apiend
+
+\apiitem{\ce --eraseattrib {\rm \emph{pattern}}}
+\NEW % 1.8
+Removes any metadata whose name matches the regular expression \emph{pattern}.
+The pattern will be case insensitive.
+
+\noindent Examples:
+
+\begin{code}
+    # Remove one item only
+    oiiotool in.jpg --eraseattrib "smpte:TimeCode" -o no_timecode.jpg
+
+    # Remove all GPS tags
+    oiiotool in.jpg --eraseattrib "GPS:.*" -o no_gps_metadata.jpg
+
+    # Remove all metadata
+    oiiotool in.exr --eraseattrib ".*" -o no_metadata.exr
+\end{code}
 \apiend
 
 \apiitem{\ce --orientation {\rm \emph{orient}}}
@@ -2737,6 +2759,12 @@ Draw (rasterize) text overtop of the current image.
  & {\cf font=}\emph{name} & font name, full path to the font file on
   disk (use double quotes {\cf "name"} if the path name includes spaces) \\
  & {\cf color=}\emph{r,g,b,...} & specify the color of the text \\
+ & {\cf xalign=}\emph{val} & controls horizontal text alignment: \qkw{left}
+                (default), \qkw{right}, \qkw{center}. \\
+ & {\cf yalign=}\emph{val} & controls vertical text alignment: \qkw{base}
+                (default), \qkw{top}, \qkw{bottom}, \qkw{center}. \\
+ & {\cf shadow=}\emph{size} & if nonzero, will make a dark shadow halo to
+                make the text more clear on bright backgrounds.
 \end{tabular}
 
 The default positions the text starting at the center of the image,
@@ -2746,11 +2774,22 @@ using a default font (which may be system dependent).
 \noindent Examples:
 
 \begin{smallcode}
-    oiiotool in.exr --text:x=10:y=400:size=40 "Hello world" \
+    oiiotool --create 320x240 3 --text:x=10:y=400:size=40 "Hello world" \
         --text:x=100:y=200:font="Arial Bold":color=1,0,0:size=60 "Go Big Red!" \
         --tocolorspace sRGB -o text.jpg
+
+    oiiotool --create 320x240 3 --text:x=160:y=120:xalign=center "Centered" \
+        --tocolorspace sRGB -o textcentered.jpg
+
+    oiiotool tahoe-small.jpg \
+            --text:x=160:y=40:xalign=center:size=40:shadow=0 "shadow = 0" \
+            --text:x=160:y=80:xalign=center:size=40:shadow=1 "shadow = 1" \
+            --text:x=160:y=120:xalign=center:size=40:shadow=2 "shadow = 2" \
+            --tocolorspace sRGB -o textshadowed.jpg
 \end{smallcode}
-\spc \includegraphics[width=2.5in]{figures/text.jpg}  \\
+\includegraphics[width=1.75in]{figures/text.jpg}
+\includegraphics[width=1.75in]{figures/textcentered.jpg}
+\includegraphics[width=1.75in]{figures/textshadowed.jpg} \\
 
 \noindent Note that because of slightly differing fonts and versions of
 Freetype available, we do not expect drawn text to be pixel-for-pixel 

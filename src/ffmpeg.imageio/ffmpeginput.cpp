@@ -29,7 +29,7 @@
 */
 
 extern "C" { // ffmpeg is a C api
-#include <errno.h>
+#include <cerrno>
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
@@ -126,8 +126,8 @@ inline int receive_frame(AVCodecContext *avctx, AVFrame *picture,
 
 #include <boost/thread/once.hpp>
 
-#include "OpenImageIO/imageio.h"
-#include  <iostream>
+#include <OpenImageIO/imageio.h>
+#include <iostream>
 
 OIIO_PLUGIN_NAMESPACE_BEGIN
 

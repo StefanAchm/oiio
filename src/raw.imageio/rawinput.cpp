@@ -28,11 +28,11 @@
   (This is the Modified BSD License)
 */
 
-#include "OpenImageIO/imageio.h"
-#include "OpenImageIO/fmath.h"
-#include "OpenImageIO/strutil.h"
+#include <OpenImageIO/imageio.h>
+#include <OpenImageIO/fmath.h>
+#include <OpenImageIO/strutil.h>
 #include <iostream>
-#include <time.h>       /* time_t, struct tm, gmtime */
+#include <ctime>       /* time_t, struct tm, gmtime */
 #include <libraw/libraw.h>
 #include <libraw/libraw_version.h>
 

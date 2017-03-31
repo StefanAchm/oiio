@@ -39,21 +39,21 @@
 #include <sstream>
 #include <algorithm>
 #include <utility>
-#include <ctype.h>
+#include <cctype>
 #include <map>
 
 #include <OpenEXR/ImfTimeCode.h>
 
-#include "OpenImageIO/argparse.h"
-#include "OpenImageIO/imageio.h"
-#include "OpenImageIO/imagebuf.h"
-#include "OpenImageIO/imagebufalgo.h"
-#include "OpenImageIO/sysutil.h"
-#include "OpenImageIO/strutil.h"
-#include "OpenImageIO/filesystem.h"
-#include "OpenImageIO/filter.h"
-#include "OpenImageIO/color.h"
-#include "OpenImageIO/timer.h"
+#include <OpenImageIO/argparse.h>
+#include <OpenImageIO/imageio.h>
+#include <OpenImageIO/imagebuf.h>
+#include <OpenImageIO/imagebufalgo.h>
+#include <OpenImageIO/sysutil.h>
+#include <OpenImageIO/strutil.h>
+#include <OpenImageIO/filesystem.h>
+#include <OpenImageIO/filter.h>
+#include <OpenImageIO/color.h>
+#include <OpenImageIO/timer.h>
 
 #include "oiiotool.h"
 
@@ -138,7 +138,7 @@ Oiiotool::Oiiotool ()
       total_imagecache_readtime (0.0),
       enable_function_timing(true),
       peak_memory(0),
-      num_outputs(0), printed_info(false)
+      num_outputs(0), printed_info(false), frame_number(0)
 {
     clear_options ();
 }
@@ -165,6 +165,7 @@ Oiiotool::clear_options ()
     nativeread = false;
     cachesize = 4096;
     autotile = 4096;
+    frame_padding = 0;
     full_command_line.clear ();
     printinfo_metamatch.clear ();
     printinfo_nometamatch.clear ();
@@ -194,6 +195,8 @@ Oiiotool::clear_options ()
     diff_hardfail = std::numeric_limits<float>::max();
     m_pending_callback = NULL;
     m_pending_argc = 0;
+    frame_number = 0;
+    frame_padding = 0;
 }
 
 
@@ -760,11 +763,27 @@ set_any_attribute (int argc, const char *argv[])
 
 
 static bool
-do_erase_attribute (ImageSpec &spec, const std::string &attribname)
+do_erase_attribute (ImageSpec &spec, string_view attribname)
 {
     spec.erase_attribute (attribname);
     return true;
 }
+
+
+
+static int
+erase_attribute (int argc, const char *argv[])
+{
+    ASSERT (argc == 2);
+    if (! ot.curimg.get()) {
+        ot.warning (argv[0], "no current image available to modify");
+        return 0;
+    }
+    string_view pattern = ot.express (argv[1]);
+    return apply_spec_mod (*ot.curimg, do_erase_attribute,
+                           pattern, ot.allsubimages);
+}
+
 
 
 template<class T>
@@ -983,7 +1002,17 @@ Oiiotool::express_parse_atom(const string_view expr, string_view& s, std::string
         }
     } else if (Strutil::parse_float (s, floatval)) {
         result = Strutil::format ("%g", floatval);
-    } else {
+    }
+    // Test some special identifiers
+    else if (Strutil::parse_identifier_if (s, "FRAME_NUMBER")) {
+        result = Strutil::format ("%d", ot.frame_number);
+    }
+    else if (Strutil::parse_identifier_if (s, "FRAME_NUMBER_PAD")) {
+        std::string fmt = ot.frame_padding == 0 ? std::string("%d")
+                                : Strutil::format ("\"%%0%dd\"", ot.frame_padding);
+        result = Strutil::format (fmt, ot.frame_number);
+    }
+    else {
         express_error (expr, s, "syntax error");
         result = orig;
         return false;
@@ -1014,7 +1043,10 @@ Oiiotool::express_parse_factors(const string_view expr, string_view& s, std::str
         return false;
     }
 
-    if (Strutil::string_is<float> (atom)) {
+    if (atom.size() >= 2 && atom.front() == '\"' && atom.back() == '\"') {
+        // Double quoted is string, return it
+        result = atom;
+    } else if (Strutil::string_is<float> (atom)) {
         // lval is a number
         lval = Strutil::from_string<float> (atom);
         while (s.size()) {
@@ -1077,7 +1109,10 @@ Oiiotool::express_parse_summands(const string_view expr, string_view& s, std::st
         return false;
     }
 
-    if (Strutil::string_is<float> (atom)) {
+    if (atom.size() >= 2 && atom.front() == '\"' && atom.back() == '\"') {
+        // Double quoted is string, strip it
+        result = atom.substr (1, atom.size()-2);
+    } else if (Strutil::string_is<float> (atom)) {
         // lval is a number
         lval = Strutil::from_string<float> (atom);
         while (s.size()) {
@@ -3959,8 +3994,24 @@ public:
         std::string font = options["font"];
         std::vector<float> textcolor (Rspec.nchannels+1, 1.0f);
         Strutil::extract_from_list_string (textcolor, options["color"]);
+        std::string ax = options["xalign"];
+        std::string ay = options["yalign"];
+        TextAlignX alignx (TextAlignX::Left);
+        TextAlignY aligny (TextAlignY::Baseline);
+        if (Strutil::iequals(ax, "right") || Strutil::iequals(ax, "r"))
+            alignx = TextAlignX::Right;
+        if (Strutil::iequals(ax, "center") || Strutil::iequals(ax, "c"))
+            alignx = TextAlignX::Center;
+        if (Strutil::iequals(ay, "top") || Strutil::iequals(ay, "t"))
+            aligny = TextAlignY::Top;
+        if (Strutil::iequals(ay, "bottom") || Strutil::iequals(ay, "b"))
+            aligny = TextAlignY::Bottom;
+        if (Strutil::iequals(ay, "center") || Strutil::iequals(ay, "c"))
+            aligny = TextAlignY::Center;
+        int shadow = Strutil::from_string<int>(options["shadow"]);
         return ImageBufAlgo::render_text (*img[0], x, y, args[1],
-                                          fontsize, font, &textcolor[0]);
+                                          fontsize, font, textcolor,
+                                          alignx, aligny, shadow);
     }
 };
 
@@ -4662,6 +4713,24 @@ command_line_string (int argc, char * argv[], bool sansattrib)
 
 
 
+static std::string
+formatted_format_list (string_view format_typename, string_view attr)
+{
+    int columns = Sysutil::terminal_columns() - 2;
+    std::stringstream s;
+    s << format_typename << " formats supported: ";
+    std::string format_list;
+    OIIO::getattribute (attr, format_list);
+    std::vector<string_view> formats;
+    Strutil::split (format_list, formats, ",");
+    std::sort (formats.begin(), formats.end());
+    format_list = Strutil::join (formats, ", ");
+    s << format_list;
+    return Strutil::wordwrap(s.str(), columns, 4);
+}
+
+
+
 static void
 print_help (ArgParse &ap)
 {
@@ -4669,18 +4738,8 @@ print_help (ArgParse &ap)
     std::cout << "\n";
     int columns = Sysutil::terminal_columns() - 2;
 
-    {
-        std::stringstream s;
-        s << "Image formats supported: ";
-        std::string format_list;
-        OIIO::getattribute ("format_list", format_list);
-        std::vector<string_view> formats;
-        Strutil::split (format_list, formats, ",");
-        std::sort (formats.begin(), formats.end());
-        format_list = Strutil::join (formats, ", ");
-        s << format_list;
-        std::cout << Strutil::wordwrap(s.str(), columns, 4) << "\n";
-    }
+    std::cout << formatted_format_list ("Input", "input_format_list") << "\n";
+    std::cout << formatted_format_list ("Output", "output_format_list") << "\n";
 
     // debugging color space names
     std::stringstream s;
@@ -4800,7 +4859,7 @@ getargs (int argc, char *argv[])
                 "--noclobber", &ot.noclobber, "", // synonym
                 "--threads %@ %d", set_threads, NULL, "Number of threads (default 0 == #cores)",
                 "--frames %s", NULL, "Frame range for '#' or printf-style wildcards",
-                "--framepadding %d", NULL, "Frame number padding digits (ignored when using printf-style wildcards)",
+                "--framepadding %d", &ot.frame_padding, "Frame number padding digits (ignored when using printf-style wildcards)",
                 "--views %s", NULL, "Views for %V/%v wildcards (comma-separated, defaults to left,right)",
                 "--wildcardoff", NULL, "Disable numeric wildcard expansion for subsequent command line arguments",
                 "--wildcardon", NULL, "Enable numeric wildcard expansion for subsequent command line arguments",
@@ -4843,6 +4902,7 @@ getargs (int argc, char *argv[])
                 "<SEPARATOR>", "Options that change current image metadata (but not pixel values):",
                 "--attrib %@ %s %s", set_any_attribute, NULL, NULL, "Sets metadata attribute (name, value) (options: type=...)",
                 "--sattrib %@ %s %s", set_string_attribute, NULL, NULL, "Sets string metadata attribute (name, value)",
+                "--eraseattrib %@ %s", erase_attribute, NULL, "Erase attributes matching regex",
                 "--caption %@ %s", set_caption, NULL, "Sets caption (ImageDescription metadata)",
                 "--keyword %@ %s", set_keyword, NULL, "Add a keyword",
                 "--clear-keywords %@", clear_keywords, NULL, "Clear all keywords",
@@ -5173,6 +5233,7 @@ handle_sequence (int argc, const char **argv)
     // OK, now we just call getargs once for each item in the sequences,
     // substituting the i-th sequence entry for its respective argument
     // every time.
+    // Note: nfilenames really means, number of frame number iterations.
     std::vector<const char *> seq_argv (argv, argv+argc+1);
     for (size_t i = 0;  i < nfilenames;  ++i) {
         if (ot.debug)
@@ -5185,6 +5246,7 @@ handle_sequence (int argc, const char **argv)
         }
 
         ot.clear_options (); // Careful to reset all command line options!
+        ot.frame_number = frame_numbers[sequence_args[0]][i];
         getargs (argc, (char **)&seq_argv[0]);
 
         ot.process_pending ();

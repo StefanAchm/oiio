@@ -17,7 +17,10 @@ option (BUILDSTATIC "Build static libraries instead of shared")
 option (LINKSTATIC  "Link with static external libraries when possible")
 option (CODECOV "Build code coverage tests")
 set (SANITIZE "" CACHE STRING "Build code using sanitizer (address, thread)")
-
+option (CLANG_TIDY "Enable clang-tidy" OFF)
+set (CLANG_TIDY_CHECKS "-*" CACHE STRING "clang-tidy checks to perform")
+set (CLANG_TIDY_ARGS "" CACHE STRING "clang-tidy args")
+option (CLANG_TIDY_FIX "Have clang-tidy fix source" OFF)
 
 # Figure out which compiler we're using
 if (CMAKE_COMPILER_IS_GNUCC)
@@ -161,14 +164,16 @@ if (CCACHE_FOUND AND USE_CCACHE)
     endif ()
 endif ()
 
+set (CSTD_FLAGS "")
 if (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANG OR CMAKE_COMPILER_IS_INTEL)
     if (USE_CPP VERSION_GREATER 11)
         message (STATUS "Building for C++14")
-        add_definitions ("-std=c++14")
+        set (CSTD_FLAGS "-std=c++14")
     else ()
         message (STATUS "Building for C++11")
-        add_definitions ("-std=c++11")
+        set (CSTD_FLAGS "-std=c++11")
     endif ()
+    add_definitions (${CSTD_FLAGS})
     if (CMAKE_COMPILER_IS_CLANG)
         # C++ >= 11 doesn't like 'register' keyword, which is in Qt headers
         add_definitions ("-Wno-deprecated-register")
@@ -182,10 +187,11 @@ endif ()
 
 
 # SIMD and machine architecture options
+set (SIMD_COMPILE_FLAGS "")
 if (NOT USE_SIMD STREQUAL "")
     message (STATUS "Compiling with SIMD level ${USE_SIMD}")
     if (USE_SIMD STREQUAL "0")
-        add_definitions ("-DOIIO_NO_SSE=1")
+        set (SIMD_COMPILE_FLAGS ${SIMD_COMPILE_FLAGS} "-DOIIO_NO_SSE=1")
     else ()
         string (REPLACE "," ";" SIMD_FEATURE_LIST ${USE_SIMD})
         foreach (feature ${SIMD_FEATURE_LIST})
@@ -193,9 +199,9 @@ if (NOT USE_SIMD STREQUAL "")
                 message (STATUS "SIMD feature: ${feature}")
             endif ()
             if (MSVC OR CMAKE_COMPILER_IS_INTEL)
-                add_definitions ("/arch:${feature}")
+                set (SIMD_COMPILE_FLAGS ${SIMD_COMPILE_FLAGS} "/arch:${feature}")
             else ()
-                add_definitions ("-m${feature}")
+                set (SIMD_COMPILE_FLAGS ${SIMD_COMPILE_FLAGS} "-m${feature}")
             endif ()
             if (feature STREQUAL "fma" AND (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANG))
                 # If fma is requested, for numerical accuracy sake, turn it
@@ -206,6 +212,7 @@ if (NOT USE_SIMD STREQUAL "")
             endif ()
         endforeach()
     endif ()
+    add_definitions (${SIMD_COMPILE_FLAGS})
 endif ()
 
 
@@ -221,10 +228,13 @@ endif ()
 include (CMakePushCheckState)
 include (CheckCXXSourceRuns)
 
+cmake_push_check_state ()
+set (CMAKE_REQUIRED_DEFINITIONS ${CSTD_FLAGS})
 check_cxx_source_runs("
       #include <regex>
       int main() {
-          return std::regex_match(\"abc\", std::regex(\"(a)(.*)\")) ? 0 : 1;
+          std::string r = std::regex_replace(std::string(\"abc\"), std::regex(\"b\"), \" \");
+          return r == \"a c\" ? 0 : -1;
       }"
       USE_STD_REGEX)
 if (USE_STD_REGEX)
@@ -232,12 +242,12 @@ if (USE_STD_REGEX)
 else ()
     add_definitions (-DUSE_BOOST_REGEX)
 endif ()
-
+cmake_pop_check_state ()
 
 # Code coverage options
 if (CODECOV AND (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANG))
     message (STATUS "Compiling for code coverage analysis")
-    add_definitions ("-ftest-coverage -fprofile-arcs -O0 -DOIIO_CODE_COVERAGE=1")
+    add_definitions ("-ftest-coverage -fprofile-arcs -O0 -D${PROJECT_NAME}_CODE_COVERAGE=1")
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -ftest-coverage -fprofile-arcs")
     set (CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -ftest-coverage -fprofile-arcs")
     set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -ftest-coverage -fprofile-arcs")
@@ -248,9 +258,7 @@ if (SANITIZE AND (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANG))
     message (STATUS "Compiling for sanitizer=${SANITIZE}")
     string (REPLACE "," ";" SANITIZE_FEATURE_LIST ${SANITIZE})
     foreach (feature ${SANITIZE_FEATURE_LIST})
-        if (VERBOSE)
-            message (STATUS "  sanitize feature: ${feature}")
-        endif ()
+        message (STATUS "  sanitize feature: ${feature}")
         add_definitions (-fsanitize=${feature})
         set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=${feature}")
         set (CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -fsanitize=${feature}")
@@ -268,9 +276,21 @@ if (SANITIZE AND (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANG))
         set (SANITIZE_LIBRARIES "asan")
         # set (SANITIZE_LIBRARIES "asan" "ubsan")
     endif()
-    add_definitions ("-DOIIO_SANITIZE=1")
+    add_definitions ("-D${PROJECT_NAME}_SANITIZE=1")
 endif ()
 
+# clang-tidy options
+if (CLANG_TIDY)
+    set (CMAKE_CXX_CLANG_TIDY "clang-tidy;-header-filter=OpenImageIO/*.h")
+    if (CLANG_TIDY_ARGS)
+        set (CMAKE_CXX_CLANG_TIDY "${CMAKE_CXX_CLANG_TIDY};${CLANG_TIDY_ARGS}")
+    endif ()
+    if (CLANG_TIDY_FIX)
+        set (CMAKE_CXX_CLANG_TIDY "${CMAKE_CXX_CLANG_TIDY};-fix")
+    endif ()
+    set (CMAKE_CXX_CLANG_TIDY "${CMAKE_CXX_CLANG_TIDY};-checks=${CLANG_TIDY_CHECKS}")
+    message (STATUS, "clang-tidy command line is: ${CMAKE_CXX_CLANG_TIDY}")
+endif ()
 
 if (EXTRA_CPP_ARGS)
     message (STATUS "Extra C++ args: ${EXTRA_CPP_ARGS}")
@@ -280,7 +300,8 @@ endif()
 
 if (BUILDSTATIC)
     message (STATUS "Building static libraries")
-    add_definitions(-DOIIO_STATIC_BUILD=1)
+    set (LIBRARY_BUILD_TYPE STATIC)
+    add_definitions(-D${PROJECT_NAME}_STATIC_BUILD=1)
     if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
         # On Linux, the lack of -fPIC when building static libraries seems
         # incompatible with the dynamic library needed for the Python bindings.
@@ -291,6 +312,8 @@ if (BUILDSTATIC)
         set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
         set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
     endif ()
+else ()
+    set (LIBRARY_BUILD_TYPE SHARED)
 endif()
 
 # Use .a files if LINKSTATIC is enabled
@@ -310,4 +333,6 @@ else ()
     endif ()
 endif ()
 
-
+if (DEFINED ENV{TRAVIS} OR DEFINED ENV{APPVEYOR} OR DEFINED ENV{CI})
+    add_definitions ("-D${PROJECT_NAME}_CI=1" "-DBUILD_CI=1")
+endif ()

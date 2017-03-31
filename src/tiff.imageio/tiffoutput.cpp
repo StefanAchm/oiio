@@ -46,13 +46,13 @@
 #define EXIFTAG_IMAGEHISTORY 37395
 #endif
 
-#include "OpenImageIO/dassert.h"
-#include "OpenImageIO/imageio.h"
-#include "OpenImageIO/filesystem.h"
-#include "OpenImageIO/strutil.h"
-#include "OpenImageIO/sysutil.h"
-#include "OpenImageIO/timer.h"
-#include "OpenImageIO/fmath.h"
+#include <OpenImageIO/dassert.h>
+#include <OpenImageIO/imageio.h>
+#include <OpenImageIO/filesystem.h>
+#include <OpenImageIO/strutil.h>
+#include <OpenImageIO/sysutil.h>
+#include <OpenImageIO/timer.h>
+#include <OpenImageIO/fmath.h>
 
 
 OIIO_PLUGIN_NAMESPACE_BEGIN
@@ -623,6 +623,14 @@ TIFFOutput::put_parameter (const std::string &name, TypeDesc type,
                           std::min (atoi(*(char **)data), m_spec.height));
             return true;
         }
+    }
+    if (Strutil::iequals(name, "Make") && type == TypeDesc::STRING) {
+        TIFFSetField (m_tif, TIFFTAG_MAKE, *(char**)data);
+        return true;
+    }
+    if (Strutil::iequals(name, "Model") && type == TypeDesc::STRING) {
+        TIFFSetField (m_tif, TIFFTAG_MODEL, *(char**)data);
+        return true;
     }
     if (Strutil::iequals(name, "Software") && type == TypeDesc::STRING) {
         TIFFSetField (m_tif, TIFFTAG_SOFTWARE, *(char**)data);

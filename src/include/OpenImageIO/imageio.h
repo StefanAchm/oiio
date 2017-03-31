@@ -54,17 +54,18 @@
 #include <limits>
 #include <cmath>
 
-#include "export.h"
-#include "oiioversion.h"
-#include "platform.h"
-#include "typedesc.h"   /* Needed for TypeDesc definition */
-#include "paramlist.h"
-#include "strutil.h"
-#include "array_view.h"
+#include <OpenImageIO/export.h>
+#include <OpenImageIO/oiioversion.h>
+#include <OpenImageIO/platform.h>
+#include <OpenImageIO/typedesc.h>
+#include <OpenImageIO/paramlist.h>
+#include <OpenImageIO/strutil.h>
+#include <OpenImageIO/array_view.h>
 
 OIIO_NAMESPACE_BEGIN
 
 class DeepData;
+struct ROI;
 
 
 /// Type we use for stride lengths.  This is only used to designate
@@ -150,6 +151,10 @@ public:
     /// Constructor for simple 2D scanline image with nothing special.
     /// If fmt is not supplied, default to unsigned 8-bit data.
     ImageSpec (int xres, int yres, int nchans, TypeDesc fmt = TypeDesc::UINT8);
+
+    /// Constructor from an ROI that gives x, y, z, and channel range, and
+    /// a data format.
+    explicit ImageSpec (const ROI &roi, TypeDesc fmt = TypeDesc::UINT8);
 
     /// Set the data format.
     void set_format (TypeDesc fmt);
@@ -1258,6 +1263,12 @@ OIIO_API std::string geterror ();
 ///     string format_list     (for 'getattribute' only, cannot set)
 ///             Comma-separated list of all format names supported
 ///             or for which plugins could be found.
+///     string input_format_list     (for 'getattribute' only, cannot set)
+///             Comma-separated list of all format names supported
+///             or for which plugins could be found that can read images.
+///     string output_format_list     (for 'getattribute' only, cannot set)
+///             Comma-separated list of all format names supported
+///             or for which plugins could be found that can write images.
 ///     string extension_list   (for 'getattribute' only, cannot set)
 ///             For each format, the format name followed by a colon,
 ///             followed by comma-separated list of all extensions that

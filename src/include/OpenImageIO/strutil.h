@@ -49,15 +49,15 @@
 #include <vector>
 #include <map>
 
-#include "export.h"
-#include "oiioversion.h"
-#include "string_view.h"
-#include "hash.h"
+#include <OpenImageIO/export.h>
+#include <OpenImageIO/oiioversion.h>
+#include <OpenImageIO/string_view.h>
+#include <OpenImageIO/hash.h>
 
 #ifndef TINYFORMAT_USE_VARIADIC_TEMPLATES
 # define TINYFORMAT_USE_VARIADIC_TEMPLATES
 #endif
-#include "tinyformat.h"
+#include <OpenImageIO/tinyformat.h>
 
 #ifndef OPENIMAGEIO_PRINTF_ARGS
 #   ifndef __GNUC__
@@ -486,6 +486,12 @@ string_view OIIO_API parse_identifier (string_view &str, bool eat=true);
 /// underscore characters.
 string_view OIIO_API parse_identifier (string_view &str,
                                        string_view allowed, bool eat);
+
+/// If the C-like identifier at the head of str exactly matches id,
+/// return true, and also advance str if eat is true. If it is not a match
+/// for id, return false and do not alter str.
+bool OIIO_API parse_identifier_if (string_view &str, string_view id,
+                                   bool eat=true);
 
 /// Return the characters until any character in sep is found, storing it in
 /// str, and additionally modify str to skip over the parsed section if eat
