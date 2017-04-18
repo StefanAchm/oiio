@@ -47,7 +47,7 @@
 #include <OpenImageIO/fmath.h>
 
 
-OIIO_NAMESPACE_USING
+using namespace OIIO;
 
 
 enum idiffErrors {
@@ -84,7 +84,7 @@ static int
 parse_files (int argc, const char *argv[])
 {
     for (int i = 0;  i < argc;  i++)
-        filenames.push_back (argv[i]);
+        filenames.emplace_back(argv[i]);
     return 0;
 }
 

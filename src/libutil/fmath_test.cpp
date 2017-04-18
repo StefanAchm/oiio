@@ -40,7 +40,7 @@
 #include <OpenImageIO/imagebufalgo_util.h>
 #include <OpenImageIO/argparse.h>
 
-OIIO_NAMESPACE_USING;
+using namespace OIIO;
 
 static int iterations = 10;
 static int ntrials = 5;
@@ -265,7 +265,7 @@ static void test_interpolate_linear ()
 
 int main (int argc, char *argv[])
 {
-#if !defined(NDEBUG) || defined(OIIO_CI) || defined(OIIO_CODECOV)
+#if !defined(NDEBUG) || defined(OIIO_CI) || defined(OIIO_CODE_COVERAGE)
     // For the sake of test time, reduce the default iterations for DEBUG,
     // CI, and code coverage builds. Explicit use of --iters or --trials
     // will override this, since it comes before the getargs() call.

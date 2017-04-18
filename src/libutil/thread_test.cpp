@@ -40,7 +40,7 @@
 #include <OpenImageIO/unittest.h>
 #include <OpenImageIO/ustring.h>
 
-OIIO_NAMESPACE_USING;
+using namespace OIIO;
 
 static int iterations = 100000;
 static int numthreads = 16;
@@ -156,7 +156,7 @@ time_thread_pool ()
 int
 main (int argc, char **argv)
 {
-#if !defined(NDEBUG) || defined(OIIO_CI) || defined(OIIO_CODECOV)
+#if !defined(NDEBUG) || defined(OIIO_CI) || defined(OIIO_CODE_COVERAGE)
     // For the sake of test time, reduce the default iterations for DEBUG,
     // CI, and code coverage builds. Explicit use of --iters or --trials
     // will override this, since it comes before the getargs() call.

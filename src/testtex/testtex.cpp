@@ -55,7 +55,7 @@
 #include <OpenImageIO/timer.h>
 #include "../libtexture/imagecache_pvt.h"
 
-OIIO_NAMESPACE_USING
+using namespace OIIO;
 
 #if OIIO_CPLUSPLUS_VERSION >= 11
 using OIIO::_1;
@@ -120,7 +120,7 @@ static int
 parse_files (int argc, const char *argv[])
 {
     for (int i = 0;  i < argc;  i++)
-        filenames.push_back (ustring(argv[i]));
+        filenames.emplace_back(argv[i]);
     return 0;
 }
 

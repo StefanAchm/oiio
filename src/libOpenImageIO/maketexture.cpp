@@ -66,7 +66,7 @@
   using std::regex_replace;
 #endif
 
-OIIO_NAMESPACE_USING
+using namespace OIIO;
 
 
 static spin_mutex maketx_mutex;   // for anything that needs locking
@@ -1345,7 +1345,7 @@ make_texture_impl (ImageBufAlgo::MakeTextureMode mode,
         if ((resize_filter == "box" || resize_filter == "triangle")
             && !orig_was_overscan) {
             ImageBufAlgo::parallel_image (get_roi(dstspec),
-                                          std::bind(resize_block, std::ref(*toplevel), std::cref(*src), _1, envlatlmode, allow_shift));
+                                          std::bind(resize_block, std::ref(*toplevel), std::cref(*src), _1, envlatlmode, allow_shift != 0));
         } else {
             Filter2D *filter = setup_filter (toplevel->spec(), src->spec(), resize_filter);
             if (! filter) {
